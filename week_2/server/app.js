@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import http from "http";
+import path from "path";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
 
@@ -36,6 +37,7 @@ function sanitizeUsers(usersMap) {
 
 export function createServerApp(options = {}) {
   const clientOrigin = options.clientOrigin || process.env.CLIENT_ORIGIN || "*";
+  const clientDist = options.clientDist || process.env.CLIENT_DIST;
 
   const app = express();
   const server = http.createServer(app);
@@ -91,6 +93,17 @@ export function createServerApp(options = {}) {
       users: sanitizeUsers(session.users)
     });
   });
+
+  // Serve built client if provided (for containerized single-service deploys).
+  if (clientDist) {
+    const resolvedDist = path.resolve(clientDist);
+    app.use(express.static(resolvedDist));
+    const indexPath = path.join(resolvedDist, "index.html");
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api") || req.path.startsWith("/socket.io")) return next();
+      res.sendFile(indexPath);
+    });
+  }
 
   io.on("connection", (socket) => {
     socket.on("join-session", (payload) => {
